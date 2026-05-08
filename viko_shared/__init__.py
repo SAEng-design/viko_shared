@@ -3,9 +3,16 @@ viko_shared — Shared modules for ViKO design tools.
 
 Public API:
     from viko_shared import (
+        # core
         init_db, register_app, save_calculation, load_calculation,
         list_projects, list_members, list_calculations,
         get_or_create_project, get_or_create_member,
+        # dashboard queries
+        list_projects_with_summary, get_project_dashboard,
+        get_project, get_member, at_risk_calcs,
+        # constants
+        APP_URLS,
+        # streamlit components
         render_project_info, project_info_is_complete,
     )
 """
@@ -22,6 +29,14 @@ from .viko_db import (
     get_or_create_member,
     get_conn,
     get_db_path,
+    # dashboard queries
+    list_projects_with_summary,
+    get_project_dashboard,
+    get_project,
+    get_member,
+    at_risk_calcs,
+    # constants
+    APP_URLS,
 )
 
 from .project_info import (
@@ -29,10 +44,10 @@ from .project_info import (
     project_info_is_complete,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
-    # viko_db
+    # viko_db core
     "init_db",
     "register_app",
     "save_calculation",
@@ -44,6 +59,14 @@ __all__ = [
     "get_or_create_member",
     "get_conn",
     "get_db_path",
+    # viko_db dashboard queries
+    "list_projects_with_summary",
+    "get_project_dashboard",
+    "get_project",
+    "get_member",
+    "at_risk_calcs",
+    # constants
+    "APP_URLS",
     # project_info
     "render_project_info",
     "project_info_is_complete",
