@@ -42,11 +42,11 @@ LOCAL_DB_PATH = Path(__file__).parent / "viko_calcs_local.db"
 # Update these as apps are deployed/renamed. Used by the dashboard to build
 # clickable links back to the source app for a given member type.
 APP_URLS: dict[str, str] = {
-    "concrete_beam":            "https://saeng-design-concrete-beam.streamlit.app",
-    "concrete_column_mn":       "https://saeng-design-concrete-column-mn.streamlit.app",
-    "welded_angle_tension":     "https://saeng-design-welded-angle.streamlit.app",
-    "bolted_angle_tension":     "https://saeng-design-bolted-angle.streamlit.app",
-    "hi_section_compression":   "https://saeng-design-hi-compression.streamlit.app",
+    "concrete_beam":            "https://beam-optimiser-humdu84vwhksgdscj72pmp.streamlit.app/",
+    "concrete_column_mn":       "https://concretecolumninteractiondiagram-h3i4mrpokucpa3pft2p6se.streamlit.app/",
+    "welded_angle_tension":     "https://angle-tension-weld-design-9grv9yn6tuxtihpxf2hjxu.streamlit.app/",
+    "bolted_angle_tension":     "https://angle-tension-bolted-design-iw9jfmngacorkf4cyhfsdy.streamlit.app/",
+    "hi_section_compression":   "https://hicompressionapp-aotarm3guenobx57j8ojnb.streamlit.app/",
 }
 
 
