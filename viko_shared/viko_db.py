@@ -35,6 +35,20 @@ NETWORK_DB_PATH = Path(
 # Local fallback for development / Streamlit Cloud testing
 LOCAL_DB_PATH = Path(__file__).parent / "viko_calcs_local.db"
 
+# ---------------------------------------------------------------------------
+# Source-app URLs (for the dashboard "open in app" links)
+# ---------------------------------------------------------------------------
+# Map app_name (matches member_type in the DB) -> deployed Streamlit URL.
+# Update these as apps are deployed/renamed. Used by the dashboard to build
+# clickable links back to the source app for a given member type.
+APP_URLS: dict[str, str] = {
+    "concrete_beam":            "https://saeng-design-concrete-beam.streamlit.app",
+    "concrete_column_mn":       "https://saeng-design-concrete-column-mn.streamlit.app",
+    "welded_angle_tension":     "https://saeng-design-welded-angle.streamlit.app",
+    "bolted_angle_tension":     "https://saeng-design-bolted-angle.streamlit.app",
+    "hi_section_compression":   "https://saeng-design-hi-compression.streamlit.app",
+}
+
 
 def get_db_path() -> Path:
     """Return the network DB path if reachable, otherwise the local fallback."""
@@ -355,3 +369,138 @@ def register_app(app_name: str, display_name: str, current_version: str,
              json.dumps(summary_schema) if summary_schema else None, _now()),
         )
         conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Dashboard queries
+# ---------------------------------------------------------------------------
+
+def list_projects_with_summary(include_archived: bool = False) -> list[dict]:
+    """
+    Return every project with a member count and worst-case utilisation
+    across its current calcs. Drives the dashboard's project list.
+    """
+    sql = """
+    SELECT
+        p.project_id,
+        p.project_number,
+        p.project_name,
+        p.client,
+        p.status,
+        p.created_at,
+        p.created_by,
+        COUNT(DISTINCT m.member_id) AS member_count,
+        COUNT(c.calc_id)            AS calc_count,
+        MAX(c.governing_utilisation) AS max_utilisation,
+        SUM(CASE WHEN c.status = 'fail' THEN 1 ELSE 0 END) AS fail_count
+    FROM projects p
+    LEFT JOIN members m
+        ON m.project_id = p.project_id AND m.deleted_at IS NULL
+    LEFT JOIN calculations c
+        ON c.member_id = m.member_id
+        AND c.is_current = 1
+        AND c.deleted_at IS NULL
+    WHERE p.deleted_at IS NULL
+    """
+    if not include_archived:
+        sql += " AND p.status = 'active' "
+    sql += " GROUP BY p.project_id ORDER BY p.created_at DESC"
+
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(sql).fetchall()]
+
+
+def get_project_dashboard(project_id: int) -> list[dict]:
+    """
+    Return one row per member in the project, joined to its current calc
+    and the app's display name. Drives the project detail view.
+    """
+    sql = """
+    SELECT
+        m.member_id,
+        m.member_mark,
+        m.member_type,
+        m.description,
+        m.created_at  AS member_created_at,
+        c.calc_id,
+        c.app_name,
+        c.app_version,
+        c.calc_label,
+        c.summary_json,
+        c.status,
+        c.governing_utilisation,
+        c.created_at  AS calc_created_at,
+        c.created_by  AS calc_created_by,
+        a.display_name AS app_display_name,
+        a.code_standard
+    FROM members m
+    LEFT JOIN calculations c
+        ON c.member_id = m.member_id
+        AND c.is_current = 1
+        AND c.deleted_at IS NULL
+    LEFT JOIN app_registry a
+        ON a.app_name = c.app_name
+    WHERE m.project_id = ? AND m.deleted_at IS NULL
+    ORDER BY m.member_type, m.member_mark
+    """
+    with get_conn() as conn:
+        rows = conn.execute(sql, (project_id,)).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        if d.get("summary_json"):
+            d["summary"] = json.loads(d["summary_json"])
+        else:
+            d["summary"] = {}
+        del d["summary_json"]
+        out.append(d)
+    return out
+
+
+def get_project(project_id: int) -> Optional[dict]:
+    """Single-project header info."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM projects WHERE project_id = ? AND deleted_at IS NULL",
+            (project_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_member(member_id: int) -> Optional[dict]:
+    """Single-member info, joined to its project."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT m.*, p.project_number, p.project_name "
+            "FROM members m JOIN projects p ON p.project_id = m.project_id "
+            "WHERE m.member_id = ? AND m.deleted_at IS NULL",
+            (member_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def at_risk_calcs(util_threshold: float = 0.95) -> list[dict]:
+    """
+    Return current calcs that have utilisation >= threshold OR status='fail'.
+    Drives the dashboard's "what should I look at" panel.
+    """
+    sql = """
+    SELECT
+        c.calc_id, c.governing_utilisation, c.status, c.calc_label,
+        c.created_at AS calc_created_at,
+        m.member_id, m.member_mark, m.member_type,
+        p.project_id, p.project_number, p.project_name,
+        a.display_name AS app_display_name
+    FROM calculations c
+    JOIN members m  ON m.member_id  = c.member_id  AND m.deleted_at IS NULL
+    JOIN projects p ON p.project_id = m.project_id AND p.deleted_at IS NULL
+    LEFT JOIN app_registry a ON a.app_name = c.app_name
+    WHERE c.is_current = 1
+      AND c.deleted_at IS NULL
+      AND (c.governing_utilisation >= ? OR c.status = 'fail')
+    ORDER BY
+        CASE c.status WHEN 'fail' THEN 0 ELSE 1 END,
+        c.governing_utilisation DESC
+    """
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(sql, (util_threshold,)).fetchall()]
